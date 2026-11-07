@@ -21,8 +21,7 @@ export default function ConvexClientProvider({
 }) {
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-      <UserSync />
-      {children}
+      <UserSync>{children}</UserSync>
     </ConvexProviderWithClerk>
   );
 }
