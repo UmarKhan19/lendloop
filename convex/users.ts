@@ -25,7 +25,10 @@ export const getCurrentUser = query({
 
 export const syncCurrentUser = mutation({
   args: {},
-  returns: v.id("users"),
+  returns: v.object({
+    userId: v.id("users"),
+    clerkId: v.string(),
+  }),
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity?.subject) {
@@ -48,15 +51,17 @@ export const syncCurrentUser = mutation({
         });
       }
 
-      return existing._id;
+      return { userId: existing._id, clerkId: identity.subject };
     }
 
-    return await ctx.db.insert("users", {
+    const userId = await ctx.db.insert("users", {
       clerkId: identity.subject,
       displayName: identity.name || "LendLoop User",
       ...(identity.pictureUrl ? { avatarUrl: identity.pictureUrl } : {}),
       role: "user",
       isTrustedLender: false,
     });
+
+    return { userId, clerkId: identity.subject };
   },
 });
