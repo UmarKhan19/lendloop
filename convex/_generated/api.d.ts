@@ -10,7 +10,9 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as toolAggregates from "../toolAggregates.js";
 import type * as toolOptions from "../toolOptions.js";
+import type * as tools from "../tools.js";
 import type * as users from "../users.js";
 
 import type {
@@ -22,7 +24,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  toolAggregates: typeof toolAggregates;
   toolOptions: typeof toolOptions;
+  tools: typeof tools;
   users: typeof users;
 }>;
 
