@@ -4,6 +4,7 @@ import { useQuery } from "convex/react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "../../../../convex/_generated/api";
+import BorrowToolSection from "@/components/BorrowToolSection";
 import { EmptyPanel, LoadingPanel } from "@/components/PageStates";
 import RequireAuth from "@/components/RequireAuth";
 import { toolConditionLabel } from "@/lib/toolOptions";
@@ -88,6 +89,8 @@ function ToolDetail() {
             </p>
           </div>
         </article>
+
+        <BorrowToolSection toolId={tool._id} />
 
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-zinc-200 bg-white px-5 py-4 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
           <p>Manage your own listings from your listings page.</p>
