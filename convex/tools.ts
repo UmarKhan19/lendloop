@@ -51,6 +51,17 @@ const publicToolValidator = v.object({
   category: v.string(),
 });
 
+const toolOwnerValidator = v.object({
+  _id: v.id("users"),
+  displayName: v.string(),
+  isTrustedLender: v.boolean(),
+});
+
+const toolDetailsValidator = v.object({
+  ...toolValidator.fields,
+  owner: v.union(toolOwnerValidator, v.null()),
+});
+
 function cleanText(value: string, label: string, maxLength: number): string {
   const cleaned = value.trim();
   if (cleaned.length === 0) {
@@ -174,7 +185,7 @@ export const getTool = query({
   args: {
     toolId: v.string(),
   },
-  returns: v.union(toolValidator, v.null()),
+  returns: v.union(toolDetailsValidator, v.null()),
   handler: async (ctx, args) => {
     await requireUser(ctx);
 
@@ -188,7 +199,17 @@ export const getTool = query({
       return null;
     }
 
-    return tool;
+    const owner = await ctx.db.get(tool.ownerId);
+    return {
+      ...tool,
+      owner: owner
+        ? {
+            _id: owner._id,
+            displayName: owner.displayName,
+            isTrustedLender: owner.isTrustedLender,
+          }
+        : null,
+    };
   },
 });
 

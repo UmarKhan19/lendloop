@@ -7,6 +7,7 @@ import { api } from "../../../../convex/_generated/api";
 import BorrowToolSection from "@/components/BorrowToolSection";
 import { EmptyPanel, LoadingPanel } from "@/components/PageStates";
 import RequireAuth from "@/components/RequireAuth";
+import TrustedLenderBadge from "@/components/TrustedLenderBadge";
 import { toolConditionLabel } from "@/lib/toolOptions";
 
 export default function ToolDetailPage() {
@@ -78,6 +79,16 @@ function ToolDetail() {
             <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
               {toolConditionLabel(tool.condition)}
             </span>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <span>
+              Listed by{" "}
+              <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                {tool.owner?.displayName ?? "Unknown member"}
+              </span>
+            </span>
+            {tool.owner?.isTrustedLender ? <TrustedLenderBadge /> : null}
           </div>
 
           <div className="mt-8 border-t border-zinc-100 pt-6 dark:border-zinc-800">

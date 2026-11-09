@@ -1108,6 +1108,7 @@ test("request queries expose tool and participant details including archived his
   });
 
   await t.run((ctx) => ctx.db.patch(toolId, { isArchived: true }));
+  await t.run((ctx) => ctx.db.patch(ownerId, { isTrustedLender: true }));
 
   const detail = await as(t, "user_borrower").query(
     api.borrowRequests.getBorrowRequest,
@@ -1122,7 +1123,11 @@ test("request queries expose tool and participant details including archived his
       isArchived: true,
     },
     borrower: { _id: borrowerId, displayName: "user_borrower" },
-    owner: { _id: ownerId, displayName: "user_owner" },
+    owner: {
+      _id: ownerId,
+      displayName: "user_owner",
+      isTrustedLender: true,
+    },
   });
 
   const outgoing = await as(t, "user_borrower").query(

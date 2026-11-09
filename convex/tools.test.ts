@@ -781,6 +781,32 @@ test("UTC midnight changes the server date used for availability", async () => {
   }
 });
 
+test("getTool includes trusted owner recognition for authenticated members", async () => {
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const toolId = await seedTool(t, ownerId);
+
+  await t.run((ctx) =>
+    ctx.db.patch(ownerId, { isTrustedLender: true }),
+  );
+
+  const tool = await t
+    .withIdentity({ subject: "user_owner" })
+    .query(api.tools.getTool, { toolId });
+
+  expect(tool).toMatchObject({
+    _id: toolId,
+    owner: {
+      _id: ownerId,
+      displayName: "user_owner",
+      isTrustedLender: true,
+    },
+  });
+
+  const publicTools = await t.query(api.tools.listPublicTools, publicQueryArgs());
+  expect(Object.keys(publicTools[0]).sort()).toEqual(["category", "name"]);
+});
+
 test("getActiveToolCount includes active listings only", async () => {
   const t = await createTest();
   const ownerId = await seedUser(t, "user_owner");

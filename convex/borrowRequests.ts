@@ -43,6 +43,7 @@ const toolSummaryValidator = v.object({
 const userSummaryValidator = v.object({
   _id: v.id("users"),
   displayName: v.string(),
+  isTrustedLender: v.boolean(),
 });
 
 const borrowRequestDetailsValidator = v.object({
@@ -75,10 +76,18 @@ async function enrichBorrowRequest(
         }
       : null,
     borrower: borrower
-      ? { _id: borrower._id, displayName: borrower.displayName }
+      ? {
+          _id: borrower._id,
+          displayName: borrower.displayName,
+          isTrustedLender: borrower.isTrustedLender,
+        }
       : null,
     owner: owner
-      ? { _id: owner._id, displayName: owner.displayName }
+      ? {
+          _id: owner._id,
+          displayName: owner.displayName,
+          isTrustedLender: owner.isTrustedLender,
+        }
       : null,
   };
 }

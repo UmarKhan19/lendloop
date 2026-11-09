@@ -7,6 +7,7 @@ import { api } from "../../../../convex/_generated/api";
 import { EmptyPanel, LoadingPanel } from "@/components/PageStates";
 import RequestStatusBadge from "@/components/RequestStatusBadge";
 import RequireAuth from "@/components/RequireAuth";
+import TrustedLenderBadge from "@/components/TrustedLenderBadge";
 import {
   borrowDayCount,
   formatBorrowDate,
@@ -134,8 +135,11 @@ function RequestDetail() {
               <dt className="text-xs font-medium uppercase tracking-[0.16em] text-zinc-500">
                 Tool owner
               </dt>
-              <dd className="mt-2 text-base font-medium text-zinc-900 dark:text-zinc-100">
-                {request.owner?.displayName ?? "Unknown member"}
+              <dd className="mt-2 flex flex-wrap items-center gap-2 text-base font-medium text-zinc-900 dark:text-zinc-100">
+                <span>{request.owner?.displayName ?? "Unknown member"}</span>
+                {request.owner?.isTrustedLender ? (
+                  <TrustedLenderBadge />
+                ) : null}
               </dd>
             </div>
             <div>
