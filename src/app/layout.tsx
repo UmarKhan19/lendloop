@@ -2,6 +2,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import ConvexClientProvider from "@/components/ConvexClientProvider";
+import SiteHeader from "@/components/SiteHeader";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,8 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lendloop",
-  description: "A Next.js app with Clerk authentication and a Convex backend.",
+  title: "LendLoop — Share and borrow tools",
+  description:
+    "Browse community tool listings, share the tools you already own, and keep track of what you lend.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,9 +27,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="flex min-h-full flex-col bg-zinc-50 text-zinc-950 dark:bg-zinc-950 dark:text-zinc-50">
         <ClerkProvider>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
+          <ConvexClientProvider>
+            <SiteHeader />
+            {children}
+          </ConvexClientProvider>
         </ClerkProvider>
       </body>
     </html>
