@@ -1198,6 +1198,30 @@ test("deleteTool lets admins remove anyone's listing", async () => {
   });
 });
 
+test("admin archiving another owner's listing updates the aggregate exactly once", async () => {
+  const t = await createTest();
+  await seedUser(t, "user_owner");
+  await seedUser(t, "user_admin", "admin");
+  const owner = t.withIdentity({ subject: "user_owner" });
+  const admin = t.withIdentity({ subject: "user_admin" });
+
+  const toolId = await owner.mutation(api.tools.createTool, validToolInput);
+  expect(await t.query(api.tools.getActiveToolCount)).toBe(1);
+
+  await admin.mutation(api.tools.deleteTool, { toolId });
+  expect(await t.query(api.tools.getActiveToolCount)).toBe(0);
+  expect(
+    await admin.query(api.admin.listAdminTools, { paginationOpts: pageArgs }),
+  ).toMatchObject({ page: [], isDone: true });
+
+  // Repeated archiving is a no-op and must not decrement the aggregate again.
+  await admin.mutation(api.tools.deleteTool, { toolId });
+  expect(await t.query(api.tools.getActiveToolCount)).toBe(0);
+  expect(await t.run((ctx) => ctx.db.get(toolId))).toMatchObject({
+    isArchived: true,
+  });
+});
+
 test("aggregate backfill is idempotent and only counts active listings", async () => {
   const t = await createTest();
   const ownerId = await seedUser(t, "user_owner");

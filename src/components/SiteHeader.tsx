@@ -1,8 +1,10 @@
 "use client";
 
 import { Show, SignInButton, SignUpButton, UserButton } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { api } from "../../convex/_generated/api";
 
 const navItems = [
   { href: "/tools", label: "Browse tools" },
@@ -13,6 +15,7 @@ const navItems = [
 
 export default function SiteHeader() {
   const pathname = usePathname();
+  const viewer = useQuery(api.users.getViewer);
 
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200/80 bg-white/90 backdrop-blur dark:border-zinc-800/80 dark:bg-zinc-950/90">
@@ -26,7 +29,10 @@ export default function SiteHeader() {
           </Link>
 
           <Show when="signed-in">
-            <nav aria-label="Main navigation" className="flex items-center gap-1">
+            <nav
+              aria-label="Main navigation"
+              className="flex flex-wrap items-center gap-1"
+            >
               {navItems.map((item) => {
                 const isActive =
                   pathname === item.href ||
@@ -47,6 +53,23 @@ export default function SiteHeader() {
                   </Link>
                 );
               })}
+              {viewer?.role === "admin" ? (
+                <Link
+                  href="/admin"
+                  aria-current={
+                    pathname === "/admin" || pathname.startsWith("/admin/")
+                      ? "page"
+                      : undefined
+                  }
+                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
+                    pathname === "/admin" || pathname.startsWith("/admin/")
+                      ? "bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300"
+                      : "text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900 dark:text-emerald-400 dark:hover:bg-emerald-950/60 dark:hover:text-emerald-300"
+                  }`}
+                >
+                  Admin
+                </Link>
+              ) : null}
             </nav>
           </Show>
         </div>

@@ -137,3 +137,30 @@ test("keeps separate records for separate accounts", async () => {
     "user_b",
   ]);
 });
+
+test("getViewer returns no profile without an authenticated identity", async () => {
+  const t = convexTest(schema, modules);
+
+  expect(await t.query(api.users.getViewer, {})).toBeNull();
+});
+
+test("getViewer exposes the backend role and trust status for the caller", async () => {
+  const t = convexTest(schema, modules);
+  const { userId } = await t
+    .withIdentity({ subject: "user_ada", name: "Ada" })
+    .mutation(api.users.syncCurrentUser);
+
+  await t.run((ctx) => ctx.db.patch(userId, { isTrustedLender: true }));
+
+  const viewer = await t
+    .withIdentity({ subject: "user_ada" })
+    .query(api.users.getViewer, {});
+
+  expect(viewer).toEqual({
+    _id: userId,
+    displayName: "Ada",
+    role: "user",
+    isTrustedLender: true,
+  });
+  expect(viewer).not.toHaveProperty("clerkId");
+});

@@ -8,7 +8,11 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     role: v.union(v.literal("user"), v.literal("admin")),
     isTrustedLender: v.boolean(),
-  }).index("by_clerkId", ["clerkId"]),
+  })
+    .index("by_clerkId", ["clerkId"])
+    .searchIndex("search_displayName", {
+      searchField: "displayName",
+    }),
   tools: defineTable({
     ownerId: v.id("users"),
     name: v.string(),
