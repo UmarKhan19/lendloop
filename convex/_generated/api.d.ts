@@ -10,6 +10,8 @@
 
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
+import type * as borrowDates from "../borrowDates.js";
+import type * as borrowRequests from "../borrowRequests.js";
 import type * as migrations from "../migrations.js";
 import type * as toolAggregates from "../toolAggregates.js";
 import type * as toolOptions from "../toolOptions.js";
@@ -25,6 +27,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
+  borrowDates: typeof borrowDates;
+  borrowRequests: typeof borrowRequests;
   migrations: typeof migrations;
   toolAggregates: typeof toolAggregates;
   toolOptions: typeof toolOptions;
