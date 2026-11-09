@@ -14,6 +14,7 @@ import type * as borrowDates from "../borrowDates.js";
 import type * as borrowRequests from "../borrowRequests.js";
 import type * as migrations from "../migrations.js";
 import type * as toolAggregates from "../toolAggregates.js";
+import type * as toolAvailability from "../toolAvailability.js";
 import type * as toolOptions from "../toolOptions.js";
 import type * as tools from "../tools.js";
 import type * as users from "../users.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   borrowRequests: typeof borrowRequests;
   migrations: typeof migrations;
   toolAggregates: typeof toolAggregates;
+  toolAvailability: typeof toolAvailability;
   toolOptions: typeof toolOptions;
   tools: typeof tools;
   users: typeof users;

@@ -8,6 +8,7 @@ import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { mutation, query } from "./_generated/server";
 import { requireAdmin, requireUser } from "./auth";
 import { validateBorrowDates } from "./borrowDates";
+import { findApprovedOverlap } from "./toolAvailability";
 
 const borrowStatusValidator = v.union(
   v.literal("pending"),
@@ -93,27 +94,6 @@ async function enrichBorrowRequests(
 
 // Pending requests do not reserve dates. Only approved requests do, and they
 // keep reserving them until the owner marks the loan returned.
-async function findApprovedOverlap(
-  ctx: ReadContext,
-  toolId: Id<"tools">,
-  startDate: string,
-  endDate: string,
-): Promise<Doc<"borrowRequests"> | null> {
-  // The index narrows to approved loans that end on or after the requested
-  // start. The database filter applies the other half of the inclusive
-  // overlap condition, and first() stops as soon as one conflict is found.
-  return await ctx.db
-    .query("borrowRequests")
-    .withIndex("by_toolId_and_status_and_endDate", (q) =>
-      q
-        .eq("toolId", toolId)
-        .eq("status", "approved")
-        .gte("endDate", startDate),
-    )
-    .filter((q) => q.lte(q.field("startDate"), endDate))
-    .first();
-}
-
 async function assertDatesAvailable(
   ctx: ReadContext,
   toolId: Id<"tools">,

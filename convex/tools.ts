@@ -6,12 +6,26 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { requireUser } from "./auth";
+import {
+  formatDateOnly,
+  parseDateOnly,
+  todayUtcDay,
+} from "./borrowDates";
+import { findApprovedReservationCoveringDate } from "./toolAvailability";
 import { activeTools } from "./toolAggregates";
 import { TOOL_CATEGORIES, TOOL_CONDITIONS } from "./toolOptions";
 
 const MAX_NAME_LENGTH = 100;
 const MAX_DESCRIPTION_LENGTH = 2_000;
 const PUBLIC_PREVIEW_LIMIT = 6;
+
+// Each candidate costs one indexed reservation lookup. Convex allows 4,096
+// index ranges and 32,000 scanned documents per query, so 100 candidates (plus
+// the single tools read) stays far below both limits. The budget is also a
+// useful latency bound for a homepage preview. If the newest 100 active tools
+// are all unavailable, the preview returns fewer than six rather than showing
+// an unverified tool.
+export const PUBLIC_AVAILABILITY_CANDIDATE_BUDGET = 100;
 
 const categoryValidator = v.union(
   ...TOOL_CATEGORIES.map((category) => v.literal(category)),
@@ -49,17 +63,45 @@ function cleanText(value: string, label: string, maxLength: number): string {
 }
 
 // Public: the homepage may only see names and categories of a small preview.
+// A tool is available when it is not archived and no approved reservation
+// covers the current UTC calendar day.
 export const listPublicTools = query({
-  args: {},
+  args: {
+    // Only a reactive identity token. The backend deliberately ignores its
+    // value when deciding what "today" is, so a manipulated client date can
+    // never expose a tool reserved for the server's current day.
+    refreshDate: v.string(),
+  },
   returns: v.array(publicToolValidator),
-  handler: async (ctx) => {
-    const tools = await ctx.db
+  handler: async (ctx, args) => {
+    if (parseDateOnly(args.refreshDate) === null) {
+      throw new ConvexError(
+        "refreshDate must be a valid date in YYYY-MM-DD format",
+      );
+    }
+
+    const today = formatDateOnly(todayUtcDay());
+
+    const candidates = await ctx.db
       .query("tools")
       .withIndex("by_isArchived", (q) => q.eq("isArchived", false))
       .order("desc")
-      .take(PUBLIC_PREVIEW_LIMIT);
+      .take(PUBLIC_AVAILABILITY_CANDIDATE_BUDGET);
 
-    return tools.map(({ name, category }) => ({ name, category }));
+    const preview: { name: string; category: string }[] = [];
+    for (const tool of candidates) {
+      const reservation = await findApprovedReservationCoveringDate(
+        ctx,
+        tool._id,
+        today,
+      );
+      if (reservation) continue;
+
+      preview.push({ name: tool.name, category: tool.category });
+      if (preview.length === PUBLIC_PREVIEW_LIMIT) break;
+    }
+
+    return preview;
   },
 });
 

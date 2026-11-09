@@ -5,10 +5,15 @@ import { useQuery } from "convex/react";
 import Link from "next/link";
 import { api } from "../../convex/_generated/api";
 import { EmptyPanel, LoadingGrid } from "@/components/PageStates";
+import useUtcDate from "@/hooks/useUtcDate";
 import { TOOL_CATEGORIES } from "@/lib/toolOptions";
 
 export default function Home() {
-  const publicTools = useQuery(api.tools.listPublicTools);
+  const utcDate = useUtcDate();
+  const publicTools = useQuery(
+    api.tools.listPublicTools,
+    utcDate === null ? "skip" : { refreshDate: utcDate },
+  );
   const activeCount = useQuery(api.tools.getActiveToolCount);
 
   return (
@@ -73,13 +78,14 @@ export default function Home() {
 
           <aside className="rounded-3xl border border-zinc-200 bg-white p-7 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 sm:p-9">
             <p className="text-sm font-medium uppercase tracking-[0.18em] text-zinc-500">
-              On the shelf
+              Active listings
             </p>
             <p className="mt-4 text-5xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50">
               {activeCount === undefined ? "…" : activeCount}
             </p>
             <p className="mt-2 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-              active tool listings shared by the LendLoop community.
+              active tool listings shared by the community. A listing can still
+              be reserved for a specific date.
             </p>
             <div className="mt-7 flex flex-wrap gap-2">
               {TOOL_CATEGORIES.slice(0, 6).map((category) => (
@@ -101,10 +107,10 @@ export default function Home() {
                 id="catalogue-heading"
                 className="text-2xl font-semibold tracking-tight text-zinc-950 dark:text-zinc-50"
               >
-                Browse the catalogue
+                Available today
               </h2>
               <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                A public preview of what members are sharing.
+                A preview of tools with no approved loan covering today.
               </p>
             </div>
             <Show when="signed-in">
@@ -122,8 +128,8 @@ export default function Home() {
               <LoadingGrid count={6} />
             ) : publicTools.length === 0 ? (
               <EmptyPanel
-                title="No tools listed yet"
-                description="Be the first to share something with the community. Sign in to add a tool."
+                title="No tools available today"
+                description="Every active listing is reserved for today, or the catalogue is empty. Check back later or sign in to share a tool."
                 action={
                   <Show when="signed-out">
                     <SignUpButton forceRedirectUrl="/tools/new">

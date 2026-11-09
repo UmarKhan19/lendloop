@@ -1,15 +1,19 @@
-import { expect, test } from "bun:test";
+import { expect, setSystemTime, test } from "bun:test";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { convexTest } from "convex-test";
 import { api, internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
+import { formatDateOnly, todayUtcDay } from "./borrowDates";
 import schema from "./schema";
+import { PUBLIC_AVAILABILITY_CANDIDATE_BUDGET } from "./tools";
 
 const modules = {
   "./_generated/api.js": () => import("./_generated/api.js"),
   "./tools.ts": () => import("./tools"),
+  "./borrowRequests.ts": () => import("./borrowRequests"),
+  "./admin.ts": () => import("./admin"),
   "./migrations.ts": () => import("./migrations"),
 };
 
@@ -110,6 +114,33 @@ async function seedTools(
     ids.push(await seedTool(t, ownerId, fields(index)));
   }
   return ids;
+}
+
+function dateFromToday(offset: number) {
+  return formatDateOnly(todayUtcDay() + offset);
+}
+
+function publicQueryArgs(refreshDate = dateFromToday(0)) {
+  return { refreshDate };
+}
+
+async function seedBorrowRequest(
+  t: AsyncTestContext,
+  fields: {
+    toolId: Id<"tools">;
+    ownerId: Id<"users">;
+    borrowerId: Id<"users">;
+    startDate: string;
+    endDate: string;
+    status: Doc<"borrowRequests">["status"];
+  },
+) {
+  return await t.run((ctx) =>
+    ctx.db.insert("borrowRequests", {
+      ...fields,
+      requestedAt: Date.now(),
+    }),
+  );
 }
 
 function sleep(ms: number) {
@@ -348,11 +379,406 @@ test("listPublicTools exposes only a limited names/categories preview", async ()
     isArchived: true,
   });
 
-  const publicTools = await t.query(api.tools.listPublicTools, {});
+  const publicTools = await t.query(api.tools.listPublicTools, publicQueryArgs());
 
   expect(publicTools).toHaveLength(6);
   expect(publicTools.map((tool) => tool.name)).not.toContain("Archived Tool");
   expect(Object.keys(publicTools[0]).sort()).toEqual(["category", "name"]);
+});
+
+test("listPublicTools hides only tools reserved for today", async () => {
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+  const today = dateFromToday(0);
+
+  const reservedTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Reserved Today",
+  });
+  const futureReservationId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Future Reservation",
+  });
+  const pendingTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Pending Today",
+  });
+  const returnedTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Returned Today",
+  });
+  const declinedTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Declined Today",
+  });
+  const cancelledTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Cancelled Today",
+  });
+  await seedTool(t, ownerId, { ...validTool, name: "Always Available" });
+
+  await seedBorrowRequest(t, {
+    toolId: reservedTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "approved",
+  });
+  await seedBorrowRequest(t, {
+    toolId: futureReservationId,
+    ownerId,
+    borrowerId,
+    startDate: dateFromToday(7),
+    endDate: dateFromToday(9),
+    status: "approved",
+  });
+  await seedBorrowRequest(t, {
+    toolId: pendingTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "pending",
+  });
+  await seedBorrowRequest(t, {
+    toolId: returnedTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "returned",
+  });
+  await seedBorrowRequest(t, {
+    toolId: declinedTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "declined",
+  });
+  await seedBorrowRequest(t, {
+    toolId: cancelledTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "cancelled",
+  });
+
+  const names = (await t.query(api.tools.listPublicTools, publicQueryArgs())).map(
+    (tool) => tool.name,
+  );
+
+  expect(names).not.toContain("Reserved Today");
+  expect(names).toEqual(
+    expect.arrayContaining([
+      "Future Reservation",
+      "Pending Today",
+      "Returned Today",
+      "Declined Today",
+      "Cancelled Today",
+      "Always Available",
+    ]),
+  );
+});
+
+test("approving and returning a loan toggles public visibility", async () => {
+  const today = dateFromToday(0);
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  await seedUser(t, "user_borrower");
+  const toolId = await seedTool(t, ownerId);
+
+  const borrower = t.withIdentity({ subject: "user_borrower" });
+  const owner = t.withIdentity({ subject: "user_owner" });
+
+  const requestId = await borrower.mutation(
+    api.borrowRequests.createBorrowRequest,
+    { toolId, startDate: today, endDate: today },
+  );
+
+  // Pending requests never reserve dates.
+  expect((await t.query(api.tools.listPublicTools, publicQueryArgs())).map((tool) => tool.name)).toEqual([
+    "Cordless Drill",
+  ]);
+
+  await owner.mutation(api.borrowRequests.approveBorrowRequest, { requestId });
+  expect(await t.query(api.tools.listPublicTools, publicQueryArgs())).toEqual([]);
+
+  await owner.mutation(api.borrowRequests.markBorrowRequestReturned, {
+    requestId,
+  });
+  expect((await t.query(api.tools.listPublicTools, publicQueryArgs())).map((tool) => tool.name)).toEqual([
+    "Cordless Drill",
+  ]);
+});
+
+test("the public preview fills six slots when available tools are within budget", async () => {
+  const today = dateFromToday(0);
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+
+  const availableNames = Array.from(
+    { length: 6 },
+    (_, index) => `Available ${index}`,
+  );
+  for (const name of availableNames) {
+    await seedTool(t, ownerId, { ...validTool, name });
+  }
+
+  // Newer unavailable tools must be verified one by one, not treated as
+  // available. Six available tools remain within the inspection budget.
+  for (let index = 0; index < 25; index += 1) {
+    const toolId = await seedTool(t, ownerId, {
+      ...validTool,
+      name: `Reserved ${index}`,
+    });
+    await seedBorrowRequest(t, {
+      toolId,
+      ownerId,
+      borrowerId,
+      startDate: today,
+      endDate: today,
+      status: "approved",
+    });
+  }
+
+  const publicTools = await t.query(api.tools.listPublicTools, publicQueryArgs());
+
+  expect(publicTools).toHaveLength(6);
+  expect(new Set(publicTools.map((tool) => tool.name))).toEqual(
+    new Set(availableNames),
+  );
+});
+
+test("more than 200 approved reservations cannot leak into the preview", async () => {
+  const today = dateFromToday(0);
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+
+  const reserveTool = async (name: string) => {
+    const toolId = await seedTool(t, ownerId, { ...validTool, name });
+    await seedBorrowRequest(t, {
+      toolId,
+      ownerId,
+      borrowerId,
+      startDate: today,
+      endDate: today,
+      status: "approved",
+    });
+  };
+
+  // The old implementation built its exclusion set from at most 200
+  // reservations. These 205 reserved tools are deliberately older than the
+  // available ones, so a truncated set would mark them available.
+  for (let index = 0; index < 205; index += 1) {
+    await reserveTool(`Old Reserved ${index}`);
+  }
+
+  await sleep(2);
+
+  const availableNames = Array.from(
+    { length: 6 },
+    (_, index) => `Verified Available ${index}`,
+  );
+  for (const name of availableNames) {
+    await seedTool(t, ownerId, { ...validTool, name });
+  }
+
+  await sleep(2);
+
+  // Fill the rest of the candidate budget with newer unavailable tools. Six
+  // available tools are still found within the 100-candidate budget.
+  for (
+    let index = 0;
+    index < PUBLIC_AVAILABILITY_CANDIDATE_BUDGET - availableNames.length;
+    index += 1
+  ) {
+    await reserveTool(`New Reserved ${index}`);
+  }
+
+  const publicTools = await t.query(
+    api.tools.listPublicTools,
+    publicQueryArgs(today),
+  );
+  const names = publicTools.map((tool) => tool.name);
+
+  expect(names).toHaveLength(6);
+  expect(new Set(names)).toEqual(new Set(availableNames));
+  expect(names.every((name) => !name.includes("Reserved"))).toBe(true);
+});
+
+test("the candidate budget is exhausted without substituting unverified tools", async () => {
+  const today = dateFromToday(0);
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+
+  for (let index = 0; index < 6; index += 1) {
+    await seedTool(t, ownerId, {
+      ...validTool,
+      name: `Available Beyond Budget ${index}`,
+    });
+  }
+
+  await sleep(2);
+
+  for (let index = 0; index < PUBLIC_AVAILABILITY_CANDIDATE_BUDGET; index += 1) {
+    const toolId = await seedTool(t, ownerId, {
+      ...validTool,
+      name: `Reserved ${index}`,
+    });
+    await seedBorrowRequest(t, {
+      toolId,
+      ownerId,
+      borrowerId,
+      startDate: today,
+      endDate: today,
+      status: "approved",
+    });
+  }
+
+  const publicTools = await t.query(
+    api.tools.listPublicTools,
+    publicQueryArgs(today),
+  );
+
+  // All 100 candidates are verified unavailable. The older available tools
+  // are beyond the inspection budget, so the query must return none of them
+  // rather than guessing.
+  expect(publicTools).toEqual([]);
+});
+
+test("refreshDate cannot change the server's availability day", async () => {
+  const today = dateFromToday(0);
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+
+  const reservedTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Reserved Today",
+  });
+  const reservedTomorrowId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Reserved Tomorrow",
+  });
+
+  await seedBorrowRequest(t, {
+    toolId: reservedTodayId,
+    ownerId,
+    borrowerId,
+    startDate: today,
+    endDate: today,
+    status: "approved",
+  });
+  await seedBorrowRequest(t, {
+    toolId: reservedTomorrowId,
+    ownerId,
+    borrowerId,
+    startDate: dateFromToday(1),
+    endDate: dateFromToday(2),
+    status: "approved",
+  });
+
+  const refreshDates = [
+    dateFromToday(-1),
+    today,
+    dateFromToday(1),
+    "2000-01-01",
+    "2099-12-31",
+  ];
+
+  for (const refreshDate of refreshDates) {
+    const names = (
+      await t.query(api.tools.listPublicTools, { refreshDate })
+    ).map((tool) => tool.name);
+
+    expect(names).toEqual(["Reserved Tomorrow"]);
+  }
+
+  await expect(
+    t.query(api.tools.listPublicTools, { refreshDate: "2026-02-30" }),
+  ).rejects.toThrow("refreshDate must be a valid date in YYYY-MM-DD format");
+});
+
+test("UTC midnight changes the server date used for availability", async () => {
+  const t = await createTest();
+  const ownerId = await seedUser(t, "user_owner");
+  const borrowerId = await seedUser(t, "user_borrower");
+
+  const startsTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Starts Today",
+  });
+  const endsTodayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Ends Today",
+  });
+  const startsTomorrowId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Starts Tomorrow",
+  });
+  const endedYesterdayId = await seedTool(t, ownerId, {
+    ...validTool,
+    name: "Ended Yesterday",
+  });
+
+  const seeded = [
+    { toolId: startsTodayId, startDate: "2026-11-09", endDate: "2026-11-11" },
+    { toolId: endsTodayId, startDate: "2026-11-07", endDate: "2026-11-09" },
+    { toolId: startsTomorrowId, startDate: "2026-11-10", endDate: "2026-11-12" },
+    { toolId: endedYesterdayId, startDate: "2026-11-07", endDate: "2026-11-08" },
+  ];
+  for (const dates of seeded) {
+    await seedBorrowRequest(t, {
+      toolId: dates.toolId,
+      ownerId,
+      borrowerId,
+      startDate: dates.startDate,
+      endDate: dates.endDate,
+      status: "approved",
+    });
+  }
+
+  try {
+    setSystemTime(new Date("2026-11-09T23:59:00.000Z"));
+    const beforeMidnight = await t.query(
+      api.tools.listPublicTools,
+      publicQueryArgs("2026-11-09"),
+    );
+    expect(new Set(beforeMidnight.map((tool) => tool.name))).toEqual(
+      new Set(["Starts Tomorrow", "Ended Yesterday"]),
+    );
+
+    setSystemTime(new Date("2026-11-10T00:00:00.000Z"));
+    const afterMidnight = await t.query(
+      api.tools.listPublicTools,
+      publicQueryArgs("2026-11-10"),
+    );
+    expect(new Set(afterMidnight.map((tool) => tool.name))).toEqual(
+      new Set(["Ends Today", "Ended Yesterday"]),
+    );
+
+    // A stale or future refresh token only changes reactive identity; the
+    // backend still uses the server's current UTC day.
+    const staleToken = await t.query(
+      api.tools.listPublicTools,
+      publicQueryArgs("2026-11-09"),
+    );
+    const futureToken = await t.query(
+      api.tools.listPublicTools,
+      publicQueryArgs("2026-11-11"),
+    );
+    expect(staleToken).toEqual(afterMidnight);
+    expect(futureToken).toEqual(afterMidnight);
+  } finally {
+    setSystemTime();
+  }
 });
 
 test("getActiveToolCount includes active listings only", async () => {
