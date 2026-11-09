@@ -7,6 +7,8 @@ import { usePathname } from "next/navigation";
 const navItems = [
   { href: "/tools", label: "Browse tools" },
   { href: "/my-listings", label: "My listings" },
+  { href: "/my-requests", label: "My requests" },
+  { href: "/incoming-requests", label: "Incoming requests" },
 ] as const;
 
 export default function SiteHeader() {
